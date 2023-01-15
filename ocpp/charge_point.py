@@ -298,7 +298,21 @@ class ChargePoint:
         # will create a call_result.BootNotificationPayload. If this method is
         # called with a call.HeartbeatPayload, then it will create a
         # call_result.HeartbeatPayload etc.
+
         cls = getattr(self._call_result, payload.__class__.__name__)  # noqa
+        signature = inspect.signature(cls.__init__)
+        class_keys = signature.parameters.keys()
+        # print(f"class attributes: {class_keys}")
+        # print(f"recv data: {snake_case_payload}")
+        keys_to_del = []
+        for key in snake_case_payload.keys():
+            if key not in class_keys:
+                # data not expected
+                # print(f"Unexpected: {key}:{snake_case_payload[key]}")
+                LOGGER.error(f"Unexpected data {key}:{snake_case_payload[key]}")
+                keys_to_del.append(key)
+        for key in keys_to_del:
+            del snake_case_payload[key]
         return cls(**snake_case_payload)
 
     async def _get_specific_response(self, unique_id, timeout):
