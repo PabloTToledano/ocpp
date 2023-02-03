@@ -125,7 +125,12 @@ class ChargePoint:
     async def start(self):
         while True:
             message = await self._connection.recv()
-            LOGGER.info("%s: receive message %s", self.id, message)
+            extra = {
+                "id": self.id,
+                "recvMsg": message,
+                "remoteAddress": self._connection.remote_address,
+            }
+            LOGGER.info("%s: receive message %s", self.id, message, extra=extra)
 
             await self.route_message(message)
 
@@ -140,6 +145,12 @@ class ChargePoint:
         try:
             msg = unpack(raw_msg)
         except OCPPError as e:
+            extra = {
+                "id": self.id,
+                "recvMsg": raw_msg,
+                "remoteAddress": self._connection.remote_address,
+                "exception": e,
+            }
             LOGGER.exception(
                 "Unable to parse message: '%s', it doesn't seem "
                 "to be valid OCPP: %s",
@@ -152,7 +163,13 @@ class ChargePoint:
             try:
                 await self._handle_call(msg)
             except OCPPError as error:
-                LOGGER.exception("Error while handling request '%s'", msg)
+                extra = {
+                    "id": self.id,
+                    "recvMsg": msg,
+                    "remoteAddress": self._connection.remote_address,
+                    "exception": error,
+                }
+                LOGGER.exception("Error while handling request '%s'", msg, extra=extra)
                 response = msg.create_call_error(error).to_json()
                 await self._send(response)
 
@@ -199,7 +216,13 @@ class ChargePoint:
             if inspect.isawaitable(response):
                 response = await response
         except Exception as e:
-            LOGGER.exception("Error while handling request '%s'", msg)
+            extra = {
+                "id": self.id,
+                "recvMsg": msg,
+                "remoteAddress": self._connection.remote_address,
+                "exception": e,
+            }
+            LOGGER.exception("Error while handling request '%s'", msg, extra=extra)
             response = msg.create_call_error(e).to_json()
             await self._send(response)
 
@@ -284,7 +307,12 @@ class ChargePoint:
                 )
 
         if response.message_type_id == MessageType.CallError:
-            LOGGER.warning("Received a CALLError: %s'", response)
+            extra = {
+                "id": self.id,
+                "CallError": response,
+                "remoteAddress": self._connection.remote_address,
+            }
+            LOGGER.warning("Received a CALLError: %s'", response, extra=extra)
             if suppress:
                 return
             raise response.to_exception()
@@ -309,7 +337,15 @@ class ChargePoint:
             if key not in class_keys:
                 # data not expected
                 # print(f"Unexpected: {key}:{snake_case_payload[key]}")
-                LOGGER.error(f"Unexpected data {key}:{snake_case_payload[key]}")
+                extra = {
+                    "id": self.id,
+                    "remoteAddress": self._connection.remote_address,
+                    "outOfSpecKey": key,
+                    "outOfSpecData": snake_case_payload[key],
+                }
+                LOGGER.error(
+                    f"Unexpected data {key}:{snake_case_payload[key]}", extra=extra
+                )
                 keys_to_del.append(key)
         for key in keys_to_del:
             del snake_case_payload[key]
@@ -329,7 +365,14 @@ class ChargePoint:
         if response.unique_id == unique_id:
             return response
 
-        LOGGER.error("Ignoring response with unknown unique id: %s", response)
+        extra = {
+            "id": self.id,
+            "remoteAddress": self._connection.remote_address,
+            "response": response,
+        }
+        LOGGER.error(
+            "Ignoring response with unknown unique id: %s", response, extra=extra
+        )
         timeout_left = wait_until - time.time()
 
         if timeout_left < 0:
@@ -338,5 +381,10 @@ class ChargePoint:
         return await self._get_specific_response(unique_id, timeout_left)
 
     async def _send(self, message):
-        LOGGER.info("%s: send %s", self.id, message)
+        extra = {
+            "id": self.id,
+            "remoteAddress": self._connection.remote_address,
+            "sendMsg": message,
+        }
+        LOGGER.info("%s: send %s", self.id, message, extra=extra)
         await self._connection.send(message)
