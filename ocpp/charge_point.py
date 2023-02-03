@@ -4,6 +4,7 @@ import logging
 import re
 import time
 import uuid
+import ast
 from dataclasses import asdict
 from typing import Dict, List, Union
 
@@ -125,9 +126,12 @@ class ChargePoint:
     async def start(self):
         while True:
             message = await self._connection.recv()
+            message_list = ast.literal_eval(message)
             extra = {
                 "id": self.id,
-                "recvMsg": message,
+                "recvMsg": message_list[-1],
+                "websocketId": message_list[1],
+                "msgType": message_list[2],
                 "remoteAddress": self._connection.remote_address,
             }
             LOGGER.info("%s: receive message %s", self.id, message, extra=extra)
